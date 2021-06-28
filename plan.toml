@@ -1,0 +1,38 @@
+# Name of the entry.
+[pepe]
+ [pepe.message]
+  # Regular expression who's match will cause a message trigger.
+  trigger = "(P|p)epe"
+
+  # Should the bot's response by a reply to the original message in case of
+  # message trigger?
+  reply = true
+
+  # Whether the mods need to subscribe, before this entry will start working.
+  # If true the mods can still unsubscribe to avoid this entry beeing processed.
+  subscribed_by_default = false
+
+ [pepe.schedule]
+  # String specifiing on what day the schedule trigger should go off.
+  date = "*"
+
+  # String containing the time of the posting.
+  ## Uses the following format HH:MM
+  ## Use the 24-hour format.
+  time = "14:17"
+
+ [pepe.payload]
+  # Messages inside message_file may use the following hooks.
+  ## %u - tagging the User who typed the message.
+  ## %w - plugging the whole word the pattern matched.
+  ## %r - plugging the portion of the message that matched the regex.
+
+  text_file = "/tmp/hey"
+
+  # File dir contains files that the bot will uploading when triggered always one
+  # at the time.
+  # You will usually want to store images or videos in the directory, but any
+  # file could be selected.
+  file_dir = "/winD/Houby/"
+
+# More entries can be created with new uniqely named headers...

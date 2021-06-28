@@ -1,2 +1,5 @@
+.*
 discord.token
-channels.json
+channels.toml
+plan.toml
+plan.d/
