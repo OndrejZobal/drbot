@@ -35,6 +35,14 @@ class Trigger:
         self.has_file_payload = False
         self.channels = []
 
+        self.text_file = None
+        self.file_dir = None
+
+        self.time = None
+        self.date = None
+        self.pattern = None
+
+
     def set_message_trigger(self, pattern, subscribed_by_default):
         self.pattern = pattern
         self.subscripbed_by_default = subscribed_by_default
@@ -49,6 +57,7 @@ class Trigger:
         if text_file != None:
             self.text_file = pathlib.Path(text_file)
             self.has_text_payload = True
+            print(f'Trigger text_file: {self.text_file}')
         if file_dir != None:
             self.file_dir = file_dir
             self.has_file_payload = True
@@ -57,7 +66,11 @@ class Trigger:
         self.channels.append(channel)
 
     def __repr__(self):
-        return self.name
+        response = f'{self.name}, pattern: {self.pattern}, time: {self.time}.\n'
+        for channel in self.channels:
+            response += f'\t- {channel.id}, {channel.preferred_trigger_time}\n'
+        return response
+
 
 
 TOKEN_PATH = './discord.token'
@@ -81,30 +94,21 @@ trigger_list = []
 async def on_ready():
     print(f'Logged in as {client.user}.')
     await parse_channels(CHANNEL_PREFERENCE_PATH)
-    print('loaded sending list')
 
 
 async def send_text_message(channel, message):
-    await channel.send(message)
+    try:
+        await channel.send(message)
+    except:
+        pass
 
 
-async def send_random_message_from_file(channel, message_file):
+async def send_random_message_from_file(message_file):
     messages = None
-    with open('message_file', 'r', encoding='utf-8') as file:
+    with open(message_file, 'r', encoding='utf-8') as file:
         messages = file.read()
     messages = messages.splitlines()
-    await send_text_message(channel, random.choice(messages).replace('\\n',
-                                                                     '\n'))
-
-
-async def process_triggered_trigger(message, trigger, source):
-    if trigger.file_dir is not None:
-        await send_random_picture(message.channel, trigger.file_dir)
-    if trigger.message_file is not None:
-        await send_random_message_from_file(message.channel,
-                                            trigger.message_file)
-    print(f'A trigger {trigger.name} was just processed on channel'
-          + f'{message.channel.id}. It was triggered by a {source}')
+    return random.choice(messages).replace('\\n', '\n')
 
 
 @client.event
@@ -117,13 +121,13 @@ async def on_message(message):
         await process_command(message)
         return
 
-    if DEBUG: print(f'The trigger list: {trigger_list}')
     for trigger in trigger_list:
         if trigger.pattern != None:
-            if DEBUG: print(f'The trigger {trigger.pattern}')
+            if DEBUG: print(f'Found trigger pattern: {trigger.pattern}')
             if re.search(trigger.pattern, message.content):
-                if DEBUG: print('reacting')
-                await process_triggered_trigger(message, trigger, "message")
+                print(f'A trigger {trigger.name} was just processed on channel '
+                      + f'{message.channel.id}. It was triggered by a message')
+                await send_random_picture(message.channel, trigger.text_file, trigger.file_dir, message)
                 return
 
 
@@ -142,10 +146,10 @@ def parse_plan(path):
         for i, entry in enumerate(toml_dict):
             trigger = Trigger(str(entry))
             trigger.pattern = toml_dict[entry].get('message').get('trigger')
-            trigger.schedule_time = toml_dict[entry].get('schedule').get('time')
-            trigger.schedule_date = toml_dict[entry].get('schedule').get('date')
+            trigger.time = toml_dict[entry].get('schedule').get('time')
+            trigger.date = toml_dict[entry].get('schedule').get('date')
             trigger.file_dir = toml_dict[entry].get('payload').get('file_dir')
-            trigger.message_file = toml_dict[entry].get('payload').get('message_file')
+            trigger.text_file = toml_dict[entry].get('payload').get('text_file')
             trigg_list.append(trigger)
 
     print("Trigger list has been reloaded")
@@ -172,7 +176,7 @@ async def parse_channels(path):
 
 
 async def serialize_channels(path):
-    print('Starting serializing channels.')
+    if DEBUG: print('Starting serializing channels.')
     new_dict = {}
     for trigger in trigger_list:
         new_dict_list = []
@@ -185,17 +189,10 @@ async def serialize_channels(path):
             new_dict_list.append(new_new_dict)
         new_dict[trigger.name] = {}
         new_dict[trigger.name]['channel'] = new_dict_list
-    print(f'Writing channels to {path}.')
+    if DEBUG: print(f'Writing channels to {path}.')
     with open(path, 'w', encoding='utf-8') as file:
         file.write(toml.dumps(new_dict))
     print('Channels saved successfully.')
-
-
-# Serializes the sending list a writes it into a json file
-async def save_sending_list():
-    serialized = json.dumps(sending_list, sort_keys=True, indent=4)
-    with open(CHANNEL_CONFIG_PATH, 'w', encoding='utf-8') as file:
-        file.write(serialized)
 
 
 # Calls an appropriate cmd function given a message.
@@ -221,7 +218,7 @@ async def process_command(message):
                 if not message.author.guild_permissions.administrator:
                     if DEBUG: print(f'User {message.author.id} issued a command outside of it\'s permissions in '
                                     + f'channel {message.channel.id}. Command: {content[1]}')
-                    await message.channel.send('Sorry kid. Admins only.')
+                    await send_text_message(message.channel, 'Sorry kid. Admins only.')
                     continue
 
         if DEBUG:
@@ -233,28 +230,37 @@ async def process_command(message):
                 print(f'An exception has occoured while processing a command {content[1]}: {e.with_traceback()}')
 
     if not command_found:
-        await message.channel.send(f'Sorry, *"{content[0]}"* is not a known command.')
+        await send_text_message(message.channel, f'Sorry, *"{content[0]}"* is not a known command.')
 
 # Obtains a path, opens it and feeds it to the channel specified.
-async def send_random_picture(channel, images_dir):
-    opened = open(get_random_image_path(images_dir), 'rb')
-    file = discord.File(opened)
+async def send_random_picture(channel, text_file=None, images_dir=None, reference=None):
+    media_file = None
+    if images_dir is not None:
+        opened = open(get_random_image_path(images_dir), 'rb')
+        media_file = discord.File(opened)
 
-    await channel.send(file=file)
+    text_message = None
+    if text_file is not None:
+        text_message = await send_random_message_from_file(text_file)
+
+    print(text_file, text_message)
+
+    await channel.send(text_message, file=media_file, reference=reference)
+
+
+# A DEBUG command
+async def cmd_print_triggers(content, message):
+    await send_text_message(message.channel, trigger_list)
 
 
 # Command that subscribes the channel id of the message to the sending list.
 async def cmd_subscribe(content, message):
     global sending_list_change, sending_list
 
-    def test_time(string):
-        return bool()
-
     channel_id = message.channel.id
 
-    print(content)
     if len(content) < 1:
-        print('Message does not contain the name of the trigger.')
+        await send_text_message(message.channel, 'Message does not contain the name of the trigger.')
         return
 
     # FAQ: Seems like there is a lot of searching with nested loops...
@@ -275,10 +281,10 @@ async def cmd_subscribe(content, message):
                     break
 
             # Create the channel entry if it didn't exist before.
-            if located_channel == None:
+            if located_channel is None:
                 located_channel = Channel(channel_id)
                 located_channel.block_message_trigger = False
-                located_channel.allow_schedule_trigger = False
+                located_channel.allow_schedule_trigger = True
 
             # Process the time argument.
             if len(content) >= 2:
@@ -286,26 +292,27 @@ async def cmd_subscribe(content, message):
                 #   The reason why I am using regex to verify the format instead
                 #   of just trying to parse the numbers, is to flex.
                 if not re.match('^(0[0-9]|1[0-9]|2[0-4]):[0-5][0-9]$', content[1]):
-                    print('Wrong time format')
+                    await send_text_message(message.channel, 'Wrong time format')
                     return
                 located_channel.preferred_trigger_time = content[1]
                 sending_list_change = True
+                rebuild_schedule()
 
                 if already_subscribed:
-                    print(f'Time changed to {content[1]}.')
-
+                    await send_text_message(message.channel, f'Time changed to {content[1]}.')
 
             # Inform the user that the channel was already subscribed.
             # The user will not be informed about this if they are just changing
             # the time of scheduled trigger.
             elif already_subscribed:
-                # In case time preferred time used is registered but the user
+                # In case preferred time is registered but the user
                 # registered the channel without specifying time, the time gets
                 # cleared.
                 if len(content) <= 1:
                     located_channel.preferred_trigger_time = None
                     sending_list_change = True
-                    print('Preferred time cleared.')
+                    rebuild_schedule()
+                    await send_text_message(message.channel, 'Preferred time cleared.')
                 else:
                     print('Already subbed.')
                 return
@@ -314,20 +321,13 @@ async def cmd_subscribe(content, message):
             if not already_subscribed:
                 trigger.channels.append(located_channel)
                 sending_list_change = True
-                print(f'Channel: {channel_id} was just subscribed to {trigger}')
+                rebuild_schedule()
+                if DEBUG: print(f'Channel: {channel_id} was just subscribed to {trigger}')
                 return
+
+        else:
+            await send_text_message(message.channel, 'Trigger by this name was not found')
         break
-
-    '''
-    if channel_id in sending_list:
-        await message.channel.send('This channel is already subbed dud.')
-        return
-
-    sending_list.append(channel_id)
-    sending_list_change = True
-    print(f'Channel {channel_id} joined the sending list.')
-    await message.channel.send('Got ya.')
-    '''
 
 
 # Removes channel id of the message from the sending list.
@@ -337,76 +337,69 @@ async def cmd_unsubscribe(content, message):
     channel_id = message.channel.id
 
     if len(content) < 1:
-        print('Message does not contain the name of the trigger.')
+        await send_text_message(message.channel, 'Command does not contain the name of the trigger.')
         return
 
     trigger_found = False
     for trigger in trigger_list:
-        print(f'trigger.name {trigger.name} contetnt {content[0]}')
+        if DEBUG: print(f'trigger.name {trigger.name} contetnt {content[0]}')
         if trigger.name != content[0]:
             continue
-
-        if trigger.name == content[0]:
-            print('Big POG')
 
         trigger_found = True
         for i, channel in enumerate(trigger.channels):
             if channel.id == channel_id:
                 trigger.channels.pop(i)
                 sending_list_change = True
-                print(f'Channel {channel_id} removed from the list')
+                if DEBUG: print(f'Channel {channel_id} removed from the list')
+                await send_text_message(message.channel, 'Channel removed.')
                 return
             else:
-                print('Channel was not subbed to this trigger.')
+                await send_text_message(message.channel, 'Channel was not subbed to this trigger.')
         break
 
     if not trigger_found:
-        print(f'Trigger {content[0]} was not found.')
-
-    '''
-    for i, uid in enumerate(sending_list):
-        if channel_id == uid:
-            sending_list.pop(i)
-            sending_list_change = True
-            print(
-                f'Channel {channel_id} was removed from the sending list.')
-            await message.channel.send('K its gone.')
-            return
-
-    await message.channel.send('This channel isn\'t even subscribed.')
-    '''
+        await send_text_message(message.channel, f'Trigger {content[0]} was not found.')
 
 
 # Pongs
 async def cmd_ping(content, message):
-    await message.channel.send('pong')
+    await send_text_message(message.channel, 'pong')
+
+
+# Saves channel preferences
+async def cmd_serialize_channels(content, message):
+    await serialize_channels(CHANNEL_PREFERENCE_PATH)
 
 
 # Prints a help messge as a response.
 async def cmd_help(content, message):
     mess = f'{client.user}\'s favourite word is ***{CMD_WORD}***.\n\n\
 Use it with the following commands:\n\
-**subscribe** - To subscribe the channel for daily pepe posting. *(admin only)*\n\
-**unsubscribe** - To unsubscribe the channel from daily pepe posting. *(admin only)*\n\
+**sub** - To subscribe the channel for daily pepe posting. *(admin only)*\n\
+**unsub** - To unsubscribe the channel from daily pepe posting. *(admin only)*\n\
 btw. You can also message me directly to subscribe for a **personal daily** pepe feed.\n\
 **pic** - To post a pepe pic (also available in DMs.)\n\n\
 ***WARNING** these are **wild** pepes! They may be **NSFW**! Use with coughtion.*'
 
-    await message.channel.send(mess)
+    await send_text_message(message.channel, mess)
 
 
+# TODO **BUG**: Since only time gets compared this will result in multiple
+#               triggers going off from just a single send_job, but every
+#               trigger has it's own send_job created, meaning there will be
+#               multiple messages send to each subbed channel based on the
+#               total number of subs with the same time set.
 # Calls for a random image to be send to each subscriber.
-async def send_to_subscribers(trigger):
-    print('sending to subscribers')
+async def send_to_subscribers(trigger, time_str=None):
+    if DEBUG: print(f'Schedule trigger {trigger.name} was triggered and is beeing processed')
 
-    # TODO Use data from new channels.toml
     for channel in trigger.channels:
         if channel.allow_schedule_trigger:
-            try:
+            if DEBUG: print(f'channel.preferred_trigger_time {channel.preferred_trigger_time} time_str {time_str}')
+            if channel.preferred_trigger_time is None or channel.preferred_trigger_time == time_str:
                 channel = await client.fetch_channel(channel.id)
-                await send_random_picture(channel, trigger.file_dir)
-            except Exception:
-                print('Someting went wrong')
+                await send_random_picture(channel, trigger.text_file, trigger.file_dir)
 
 
 # If any changes have been made to sending list this will call for it being
@@ -420,8 +413,9 @@ def start_sending_list_autosave():
 
 
 # Starts the async task of sending. Used with the scheduler
-def send_job(trigger):
-    asyncio.run_coroutine_threadsafe(send_to_subscribers(trigger), client.loop)
+def send_job(trigger, time_str):
+    print('Schedule send job triggered.')
+    asyncio.run_coroutine_threadsafe(send_to_subscribers(trigger, time_str), client.loop)
 
 
 def rebuild_schedule():
@@ -432,10 +426,15 @@ def rebuild_schedule():
     # Loop through all triggers
     for trigger in trigger_list:
         # Find schedule triggers
-        if trigger.has_schedule_trigger:
-            # TODO Parse the datetime values
-            # Add the trigger
-            schedule.every.day.at(trigger.time).do(send_job, trigger)
+        if type(trigger.time) == str:
+            for channel in trigger.channels:
+                send_time = trigger.time
+                if channel.preferred_trigger_time is not None:
+                    send_time = channel.preferred_trigger_time
+                # Add the trigger
+                schedule.every().day.at(send_time).do(send_job, trigger, send_time)
+                if DEBUG: print(f'Adding schedule trigger: {trigger}')
+    print('The schedule has been rebuilt.')
 
 
 # Sets up the tasks and their timings
@@ -458,7 +457,7 @@ def get_random_image_path(directory):
             n = n+1
             if random.uniform(0, n) < 1:
                 rfile = os.path.join(root, name)
-    print(f'Random image is {rfile}')
+    if DEBUG: print(f'Random image is {rfile}')
     return rfile
 
 
@@ -480,6 +479,9 @@ def init_command_list():
         [cmd_ping, ['ping', 'pong'], False],
         [cmd_help, ['help'], False]
     ]
+    if DEBUG:
+        command_list.append([cmd_print_triggers, ['trigg'], True])
+        command_list.append([cmd_serialize_channels, ['ser'], True])
 
 
 def main():
@@ -495,6 +497,6 @@ if __name__ == '__main__':
     try:
         main()
     except KeyboardInterrupt:
-        print('interupted')
+        print('interrupted')
     except Exception:
         main()
