@@ -386,7 +386,7 @@ btw. You can also message me directly to subscribe for a **personal daily** pepe
 
 
 # Calls for a random image to be send to each subscriber.
-async def send_to_subscribers(trigger, time_str=None):
+async def send_to_subscribers(trigger, sender_channel, time_str=None):
     if DEBUG: print(f'Schedule trigger {trigger.name} was triggered and is beeing processed')
 
     for channel in trigger.channels:
