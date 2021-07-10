@@ -166,13 +166,14 @@ async def parse_channels(path):
     toml_dict = toml.load(path)
     for trigger in trigger_list:
         sub_entries = toml_dict.get(trigger.name)
-        for sub_entry in sub_entries['channel']:
-            if sub_entry:
-                channel = Channel(sub_entry.get('id'))
-                channel.allow_schedule_trigger = sub_entry.get('allow_schedule_trigger')
-                channel.preferred_trigger_time = sub_entry.get('preferred_trigger_time')
-                channel.block_message_trigger = sub_entry.get('block_message_trigger')
-                trigger.add_channel(channel)
+        if sub_entries is not None:
+            for sub_entry in sub_entries['channel']:
+                if sub_entry:
+                    channel = Channel(sub_entry.get('id'))
+                    channel.allow_schedule_trigger = sub_entry.get('allow_schedule_trigger')
+                    channel.preferred_trigger_time = sub_entry.get('preferred_trigger_time')
+                    channel.block_message_trigger = sub_entry.get('block_message_trigger')
+                    trigger.add_channel(channel)
 
 
 async def serialize_channels(path):
