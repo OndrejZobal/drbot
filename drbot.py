@@ -385,11 +385,6 @@ btw. You can also message me directly to subscribe for a **personal daily** pepe
     await send_text_message(message.channel, mess)
 
 
-# TODO **BUG**: Since only time gets compared this will result in multiple
-#               triggers going off from just a single send_job, but every
-#               trigger has it's own send_job created, meaning there will be
-#               multiple messages send to each subbed channel based on the
-#               total number of subs with the same time set.
 # Calls for a random image to be send to each subscriber.
 async def send_to_subscribers(trigger, time_str=None):
     if DEBUG: print(f'Schedule trigger {trigger.name} was triggered and is beeing processed')
@@ -397,7 +392,7 @@ async def send_to_subscribers(trigger, time_str=None):
     for channel in trigger.channels:
         if channel.allow_schedule_trigger:
             if DEBUG: print(f'channel.preferred_trigger_time {channel.preferred_trigger_time} time_str {time_str}')
-            if channel.preferred_trigger_time is None or channel.preferred_trigger_time == time_str:
+            if (channel.preferred_trigger_time is None or channel.preferred_trigger_time == time_str) and channel == sender_channel:
                 channel = await client.fetch_channel(channel.id)
                 await send_random_picture(channel, trigger.text_file, trigger.file_dir)
 
@@ -413,9 +408,9 @@ def start_sending_list_autosave():
 
 
 # Starts the async task of sending. Used with the scheduler
-def send_job(trigger, time_str):
+def send_job(trigger, time_str, sender_channel=None):
     print('Schedule send job triggered.')
-    asyncio.run_coroutine_threadsafe(send_to_subscribers(trigger, time_str), client.loop)
+    asyncio.run_coroutine_threadsafe(send_to_subscribers(trigger, time_str, sender_channel), client.loop)
 
 
 def rebuild_schedule():
@@ -432,7 +427,7 @@ def rebuild_schedule():
                 if channel.preferred_trigger_time is not None:
                     send_time = channel.preferred_trigger_time
                 # Add the trigger
-                schedule.every().day.at(send_time).do(send_job, trigger, send_time)
+                schedule.every().day.at(send_time).do(send_job, trigger, send_time, channel)
                 if DEBUG: print(f'Adding schedule trigger: {trigger}')
     print('The schedule has been rebuilt.')
 
