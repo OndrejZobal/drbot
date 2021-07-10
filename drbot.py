@@ -123,7 +123,6 @@ async def on_message(message):
 
     for trigger in trigger_list:
         if trigger.pattern != None:
-            if DEBUG: print(f'Found trigger pattern: {trigger.pattern}')
             if re.search(trigger.pattern, message.content):
                 print(f'A trigger {trigger.name} was just processed on channel '
                       + f'{message.channel.id}. It was triggered by a message')
