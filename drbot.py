@@ -73,12 +73,11 @@ class Trigger:
         return response
 
 
+SETTINGS_PATH = './settings.toml'
 
 TOKEN_PATH = './discord.token'
-CONFIG_PATH = './config.toml'
-#IMAGES_DIR_PATH = 'F:\\frens\\1.00' # TODO will be moved to 'plan.toml'.
 CHANNEL_CONFIG_PATH = './channels.json' # Will be moved to channels.toml.
-CMD_WORD = '>test' # TODO move to a config file.
+CMD_WORD = '!' # TODO move to a config file.
 PLAN_PATH = "plan.toml" # TODO move this eventually.
 CHANNEL_PREFERENCE_PATH='channels.toml'
 DEBUG = True
@@ -163,6 +162,15 @@ def parse_plan(path):
     # Returning all Trigger objects in a list.
     trigger_list = trigg_list
 
+def parse_settings(path):
+    global CMD_WORD, DEBUG, TOKEN_PATH, PLAN_PATH, CHANNEL_PREFERENCE_PATH
+    toml_dict = toml.load(path).get('settings')
+    CMD_WORD = toml_dict.get('command_word')
+    DEBUG = toml_dict.get('debug_mode')
+    TOKEN_PATH = toml_dict.get('token_file_path')
+    PLAN_PATH = toml_dict.get('trigger_list_path')
+    CHANNEL_PREFERENCE_PATH = toml_dict.get('channel_list_path')
+    # TODO add more options to the list
 
 async def parse_channels(path):
     global trigger_list
@@ -487,6 +495,7 @@ def init_command_list():
 
 
 def main():
+    parse_settings(SETTINGS_PATH)
     init_command_list()
     # TODO load triggers.
     # Starts the scheduling thread

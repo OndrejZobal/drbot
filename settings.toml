@@ -1,0 +1,8 @@
+[settings]
+debug_mode=false
+command_word="$drbot"
+token_file_path="discord.token"
+trigger_list_path="plan.toml"
+triger_directory_path="plan.d/"
+channel_list_path="channels.toml"
+log_file_path="log.txt"
