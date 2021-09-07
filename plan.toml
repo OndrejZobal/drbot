@@ -3,6 +3,7 @@
  [pepe.message]
   # Regular expression who's match will cause a message trigger.
   trigger = "(P|p)epe"
+  trigger_chance = 0.5
 
   # Should the bot's response by a reply to the original message in case of
   # message trigger?
@@ -14,20 +15,23 @@
 
  [pepe.schedule]
   # String specifiing on what day the schedule trigger should go off.
+  # At this time the date parameter is not implemented and will not
+  # influence the program in any way.
   date = "*"
 
   # String containing the time of the posting.
   ## Uses the following format HH:MM
   ## Use the 24-hour format.
-  time = "14:17"
+  time = "15:14"
 
  [pepe.payload]
   # Messages inside message_file may use the following hooks.
   ## %u - tagging the User who typed the message.
   ## %w - plugging the whole word the pattern matched.
   ## %r - plugging the portion of the message that matched the regex.
+  # The above mentioned feature is not yet implemented at this time!
 
-  text_file = "/tmp/hey"
+  text_file = "pepe_reactions.txt"
 
   # File dir contains files that the bot will uploading when triggered always one
   # at the time.

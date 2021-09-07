@@ -1,11 +1,9 @@
 #!/usr/bin/python
 
-# Maybe I should have made this procedural well whatever. I wanted this to be
-# just one file.
-
 import time
 import random
 import os
+import random
 import asyncio
 import threading
 import pathlib
@@ -41,6 +39,9 @@ class Trigger:
         self.time = None
         self.date = None
         self.pattern = None
+        # A chance for the bot to react to the pattern.
+        # A number between 0 and 1 inc.
+        self.pattern_trigger_chance = 1
 
 
     def set_message_trigger(self, pattern, subscribed_by_default):
@@ -125,8 +126,12 @@ async def on_message(message):
         if trigger.pattern != None:
             if re.search(trigger.pattern, message.content):
                 print(f'A trigger {trigger.name} was just processed on channel '
-                      + f'{message.channel.id}. It was triggered by a message')
-                await send_random_picture(message.channel, trigger.text_file, trigger.file_dir, message)
+                      + f'{message.channel.id}. It was triggered by a message', end=' ')
+                if random.random() < trigger.pattern_trigger_chance:
+                    print('The trigger will be executed')
+                    await send_random_picture(message.channel, trigger.text_file, trigger.file_dir, message)
+                elif DEBUG:
+                    print('The trigger was ignored due to it\'s trigger chance')
                 return
 
 
@@ -149,6 +154,7 @@ def parse_plan(path):
             trigger.date = toml_dict[entry].get('schedule').get('date')
             trigger.file_dir = toml_dict[entry].get('payload').get('file_dir')
             trigger.text_file = toml_dict[entry].get('payload').get('text_file')
+            trigger.pattern_trigger_chance = toml_dict[entry].get('message').get('trigger_chance')
             trigg_list.append(trigger)
 
     print("Trigger list has been reloaded")
@@ -156,7 +162,6 @@ def parse_plan(path):
     # TODO actualy set this shit in the function.
     # Returning all Trigger objects in a list.
     trigger_list = trigg_list
-    rebuild_schedule()
 
 
 async def parse_channels(path):
@@ -173,6 +178,7 @@ async def parse_channels(path):
                     channel.preferred_trigger_time = sub_entry.get('preferred_trigger_time')
                     channel.block_message_trigger = sub_entry.get('block_message_trigger')
                     trigger.add_channel(channel)
+    rebuild_schedule()
 
 
 async def serialize_channels(path):
@@ -390,9 +396,9 @@ async def send_to_subscribers(trigger, sender_channel, time_str=None):
     if DEBUG: print(f'Schedule trigger {trigger.name} was triggered and is beeing processed')
 
     for channel in trigger.channels:
-        if channel.allow_schedule_trigger:
-            if DEBUG: print(f'channel.preferred_trigger_time {channel.preferred_trigger_time} time_str {time_str}')
-            if (channel.preferred_trigger_time is None or channel.preferred_trigger_time == time_str) and channel == sender_channel:
+        if channel == sender_channel:
+            if channel.allow_schedule_trigger and (channel.preferred_trigger_time is None or channel.preferred_trigger_time == time_str):
+                if DEBUG: print(f'channel.preferred_trigger_time {channel.preferred_trigger_time} time_str {time_str}')
                 channel = await client.fetch_channel(channel.id)
                 await send_random_picture(channel, trigger.text_file, trigger.file_dir)
 
@@ -410,7 +416,7 @@ def start_sending_list_autosave():
 # Starts the async task of sending. Used with the scheduler
 def send_job(trigger, time_str, sender_channel=None):
     print('Schedule send job triggered.')
-    asyncio.run_coroutine_threadsafe(send_to_subscribers(trigger, time_str, sender_channel), client.loop)
+    asyncio.run_coroutine_threadsafe(send_to_subscribers(trigger, sender_channel, time_str), client.loop)
 
 
 def rebuild_schedule():
@@ -428,7 +434,7 @@ def rebuild_schedule():
                     send_time = channel.preferred_trigger_time
                 # Add the trigger
                 schedule.every().day.at(send_time).do(send_job, trigger, send_time, channel)
-                if DEBUG: print(f'Adding schedule trigger: {trigger}')
+                if DEBUG: print(f'Adding schedule trigger: {trigger} for {send_time}')
     print('The schedule has been rebuilt.')
 
 
@@ -462,6 +468,7 @@ def get_token():
         return file.read().strip().replace('\n', '')\
             .replace('\t', '')\
             .replace(' ', '')
+        # The frantic replacing is most likely redundant but whatever.
 
 
 # Creates command_list with the functions and their aliases
