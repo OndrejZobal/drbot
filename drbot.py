@@ -89,6 +89,8 @@ command_list = []
 
 trigger_list = []
 
+last_plan_edit = None
+last_settings_edit = None
 
 @client.event
 async def on_ready():
@@ -143,7 +145,7 @@ def parse_plan(path):
     global trigger_list
     # Converting each entry into a trigger object.
     trigg_list = []
-    for file in get_plan_paths():
+    for file in get_plan_paths():   # TODO What the fuck
         # Using a random library to parse it.
         toml_dict = toml.load(path)
         for i, entry in enumerate(toml_dict):
@@ -158,8 +160,6 @@ def parse_plan(path):
 
     print("Trigger list has been reloaded")
     print(f'Total count of triggers is: {len(trigg_list)}')
-    # TODO actualy set this shit in the function.
-    # Returning all Trigger objects in a list.
     trigger_list = trigg_list
 
 def parse_settings(path):
@@ -426,11 +426,27 @@ def send_job(trigger, time_str, sender_channel=None):
     print('Schedule send job triggered.')
     asyncio.run_coroutine_threadsafe(send_to_subscribers(trigger, sender_channel, time_str), client.loop)
 
+def reload_configuration(force=False):
+    global last_plan_edit, last_settings_edit
+
+    actual_last_plan_edit = os.path.getmtime(PLAN_PATH)
+    if last_plan_edit is None or last_plan_edit != actual_last_plan_edit or force:
+        if DEBUG: print('Trigger list updated, reloading')
+        parse_plan(get_plan_paths())
+        last_plan_edit = actual_last_plan_edit
+
+    actual_last_settings_edit = os.path.getmtime(SETTINGS_PATH)
+    if last_settings_edit is None or last_settings_edit != actual_last_settings_edit or force:
+        if DEBUG: print('Settings updated, reloading')
+        parse_settings(SETTINGS_PATH)
+        last_settings_edit = actual_last_settings_edit
+
 
 def rebuild_schedule():
     # Remove all jobs
     schedule.clear()
-    schedule.every(1).minutes.do(start_sending_list_autosave)
+    schedule.every(5).minutes.do(start_sending_list_autosave)
+    schedule.every(1).minutes.do(reload_configuration)
 
     # Loop through all triggers
     for trigger in trigger_list:
@@ -500,6 +516,7 @@ def main():
     # TODO load triggers.
     # Starts the scheduling thread
     threading.Thread(target=set_schedule).start()
+    reload_configuration()
     # Starts the discord event loop
     client.run(get_token())
 
